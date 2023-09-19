@@ -20,10 +20,12 @@ package org.apache.paimon.flink.sink.cdc;
 
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
-import org.apache.paimon.flink.action.cdc.DatabaseSyncMode;
+import org.apache.paimon.flink.FlinkConnectorOptions;
+import org.apache.paimon.flink.action.MultiTablesSinkMode;
 import org.apache.paimon.flink.sink.FlinkStreamPartitioner;
-import org.apache.paimon.flink.sink.index.GlobalDynamicCdcBucketSink;
 import org.apache.paimon.flink.utils.SingleOutputStreamOperatorUtils;
+import org.apache.paimon.options.MemorySize;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.table.BucketMode;
 import org.apache.paimon.table.FileStoreTable;
@@ -37,8 +39,9 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
-import static org.apache.paimon.flink.action.cdc.DatabaseSyncMode.COMBINED;
+import static org.apache.paimon.flink.action.MultiTablesSinkMode.COMBINED;
 import static org.apache.paimon.flink.sink.FlinkStreamPartitioner.partition;
 
 /**
@@ -61,6 +64,9 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
     private List<FileStoreTable> tables = new ArrayList<>();
 
     @Nullable private Integer parallelism;
+    private double committerCpu;
+    @Nullable private MemorySize committerMemory;
+
     // Paimon catalog used to check and create tables. There will be two
     //     places where this catalog is used. 1) in processing function,
     //     it will check newly added tables and create the corresponding
@@ -69,7 +75,7 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
     private Catalog.Loader catalogLoader;
     // database to sync, currently only support single database
     private String database;
-    private DatabaseSyncMode mode;
+    private MultiTablesSinkMode mode;
 
     public FlinkCdcSyncDatabaseSinkBuilder<T> withInput(DataStream<T> input) {
         this.input = input;
@@ -87,8 +93,14 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
         return this;
     }
 
-    public FlinkCdcSyncDatabaseSinkBuilder<T> withParallelism(@Nullable Integer parallelism) {
-        this.parallelism = parallelism;
+    public FlinkCdcSyncDatabaseSinkBuilder<T> withTableOptions(Map<String, String> options) {
+        return withTableOptions(Options.fromMap(options));
+    }
+
+    public FlinkCdcSyncDatabaseSinkBuilder<T> withTableOptions(Options options) {
+        this.parallelism = options.get(FlinkConnectorOptions.SINK_PARALLELISM);
+        this.committerCpu = options.get(FlinkConnectorOptions.SINK_COMMITTER_CPU);
+        this.committerMemory = options.get(FlinkConnectorOptions.SINK_COMMITTER_MEMORY);
         return this;
     }
 
@@ -102,7 +114,7 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
         return this;
     }
 
-    public FlinkCdcSyncDatabaseSinkBuilder<T> withMode(DatabaseSyncMode mode) {
+    public FlinkCdcSyncDatabaseSinkBuilder<T> withMode(MultiTablesSinkMode mode) {
         this.mode = mode;
         return this;
     }
@@ -149,7 +161,8 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
             partitioned.setParallelism(parallelism);
         }
 
-        FlinkCdcMultiTableSink sink = new FlinkCdcMultiTableSink(catalogLoader);
+        FlinkCdcMultiTableSink sink =
+                new FlinkCdcMultiTableSink(catalogLoader, committerCpu, committerMemory);
         sink.sinkFrom(new DataStream<>(input.getExecutionEnvironment(), partitioned));
     }
 
@@ -196,8 +209,6 @@ public class FlinkCdcSyncDatabaseSinkBuilder<T> {
                     new CdcDynamicBucketSink(table).build(parsedForTable, parallelism);
                     break;
                 case GLOBAL_DYNAMIC:
-                    new GlobalDynamicCdcBucketSink(table).build(parsedForTable, parallelism);
-                    break;
                 case UNAWARE:
                 default:
                     throw new UnsupportedOperationException(

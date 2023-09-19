@@ -18,6 +18,7 @@
 
 package org.apache.paimon.flink.action;
 
+import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.flink.FlinkCatalog;
 import org.apache.paimon.flink.FlinkCatalogFactory;
@@ -43,8 +44,7 @@ import java.util.stream.Collectors;
 /** Abstract base of {@link Action} for table. */
 public abstract class ActionBase implements Action {
 
-    private final Options catalogOptions;
-
+    protected final Options catalogOptions;
     protected final Catalog catalog;
     protected final FlinkCatalog flinkCatalog;
     protected final String catalogName = "paimon-" + UUID.randomUUID();
@@ -58,6 +58,8 @@ public abstract class ActionBase implements Action {
         catalog = FlinkCatalogFactory.createPaimonCatalog(catalogOptions);
         flinkCatalog = FlinkCatalogFactory.createCatalog(catalogName, catalog, catalogOptions);
         env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // we enable object reuse, we copy the un-reusable object ourselves.
+        env.getConfig().enableObjectReuse();
         batchTEnv = StreamTableEnvironment.create(env, EnvironmentSettings.inBatchMode());
 
         // register flink catalog to table environment
@@ -105,5 +107,10 @@ public abstract class ActionBase implements Action {
         }
 
         return true;
+    }
+
+    @VisibleForTesting
+    public Map<String, String> catalogConfig() {
+        return catalogOptions.toMap();
     }
 }
