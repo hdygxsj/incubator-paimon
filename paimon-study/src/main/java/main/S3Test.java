@@ -22,7 +22,7 @@ public class S3Test {
                     + ");";
 
     static String createTable =
-            "CREATE  TABLE IF  NOT EXISTS  word_count (\n"
+            "CREATE  TABLE IF  NOT EXISTS  word_count2 (\n"
                     + "    word STRING PRIMARY KEY NOT ENFORCED,\n"
                     + "    cnt BIGINT\n"
                     + ");";
@@ -41,20 +41,36 @@ public class S3Test {
         System.out.println(createDataGenTable);
         Configuration conf = new Configuration();
         conf.setString("execution.checkpointing.interval","10 s");
+        conf.setString("taskmanager.memory.process.size","4096m");
+        conf.setString("taskmanager.memory.process.size","4096m");
+        conf.setString("taskmanager.numberOfTaskSlots","8");
+        conf.setString("parallelism.default","8");
+        conf.setString("taskmanager.cpu.cores","4");
+        conf.setString("taskmanager.memory.framework.heap.size","1024m");
+        conf.setString("s3.endpoint","http://127.0.0.1:32308");
+        conf.setString("s3.access-key","8mTteAmJvAPVTBb6V17g");
+        conf.setString("s3.secret-key","Yot3zbAKKY4D6pvmnosSNvnMiNeZZMmaAvuipFQ1");
+        conf.setString("state.checkpoints.dir:","s3p://flink/checkpoints");
+        conf.setString("state.savepoints.dir","s3a://flink/savepoints");
+        conf.setString("state.backend.type","rocksdb");
+        conf.setString("state.backend.incremental","true");
+        conf.setString("state.backend.rocksdb.localdir","H:\\rocksdb");
         conf.setInteger(RestOptions.PORT,8085);
         LocalStreamEnvironment localEnvironment = StreamExecutionEnvironment.createLocalEnvironment(conf);
+        localEnvironment.enableCheckpointing(10000);
         StreamTableEnvironment tenv = StreamTableEnvironment.create(localEnvironment);
 //        TableEnvironment tenv =
 //                TableEnvironment.create(
 //                        EnvironmentSettings.newInstance().inStreamingMode().build());
         tenv.executeSql(createCatalog);
+
         tenv.executeSql("use CATALOG my_catalog");
 //        tenv.executeSql("show databases").print();
         tenv.executeSql(createDataGenTable);
         tenv.executeSql(createTable);
 //        tenv.executeSql(showTable).print();
 //        tenv.executeSql("SELECT word, COUNT(*) FROM word_table GROUP BY word").print();
-        tenv.executeSql("INSERT INTO word_count SELECT word, COUNT(*) FROM word_table GROUP BY word;");
+        tenv.executeSql("INSERT INTO word_count2 SELECT word, COUNT(*) FROM word_table GROUP BY word;");
 //        System.out.println(tableResult.getJobClient().get().getJobStatus());
 //        tenv.executeSql("select * from word_count").print();
 
