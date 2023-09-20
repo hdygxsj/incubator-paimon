@@ -39,7 +39,7 @@ import static org.apache.paimon.flink.FlinkCatalogOptions.DEFAULT_DATABASE;
 /** Factory for {@link FlinkGenericCatalog}. */
 public class FlinkGenericCatalogFactory implements CatalogFactory {
 
-    public static final String IDENTIFIER = "paimon-generic";
+    public static final String IDENTIFIER = "Dgeneric";
 
     @Override
     public String factoryIdentifier() {

@@ -69,6 +69,12 @@ public interface CatalogFactory extends Factory {
                 FactoryUtil.discoverFactory(classLoader, CatalogFactory.class, metastore);
 
         Path warehousePath = new Path(warehouse);
+        FileIO fileIO = createFileIO(context, warehousePath, warehouse);
+
+        return catalogFactory.create(fileIO, warehousePath, context);
+    }
+
+    static FileIO createFileIO(CatalogContext context, Path warehousePath, String warehouse) {
         FileIO fileIO;
 
         try {
@@ -85,7 +91,6 @@ public interface CatalogFactory extends Factory {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-
-        return catalogFactory.create(fileIO, warehousePath, context);
+        return fileIO;
     }
 }
