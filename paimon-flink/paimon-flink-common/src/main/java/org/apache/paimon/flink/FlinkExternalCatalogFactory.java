@@ -1,13 +1,14 @@
 package org.apache.paimon.flink;
 
-import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.table.factories.CatalogFactory;
 import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.factories.FactoryUtil;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.options.Options;
+
+import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.table.factories.CatalogFactory;
 
 import java.util.Map;
 import java.util.Set;
@@ -23,10 +24,10 @@ public class FlinkExternalCatalogFactory implements CatalogFactory {
     public String factoryIdentifier() {
         return IDENTIFIER;
     }
+
     @Override
     public FlinkExternalCatalog createCatalog(Context context) {
-        return createCatalog(
-                context.getClassLoader(), context.getOptions(), context.getName());
+        return createCatalog(context.getClassLoader(), context.getOptions(), context.getName());
     }
 
     @VisibleForTesting
@@ -37,10 +38,14 @@ public class FlinkExternalCatalogFactory implements CatalogFactory {
         CatalogContext context = CatalogContext.create(options, fallbackIOLoader);
         String metastore = context.options().get(METASTORE);
         org.apache.paimon.catalog.CatalogFactory catalogFactory =
-                FactoryUtil.discoverFactory(cl, org.apache.paimon.catalog.CatalogFactory.class, metastore);
-        String warehouse = org.apache.paimon.catalog.CatalogFactory.warehouse(context).toUri().toString();
+                FactoryUtil.discoverFactory(
+                        cl, org.apache.paimon.catalog.CatalogFactory.class, metastore);
+        String warehouse =
+                org.apache.paimon.catalog.CatalogFactory.warehouse(context).toUri().toString();
         Path warehousePath = new Path(warehouse);
-        FileIO fileIO = org.apache.paimon.catalog.CatalogFactory.createFileIO(context, warehousePath, warehouse);
+        FileIO fileIO =
+                org.apache.paimon.catalog.CatalogFactory.createFileIO(
+                        context, warehousePath, warehouse);
         FlinkCatalog paimon =
                 new FlinkCatalog(
                         catalogFactory.create(fileIO, warehousePath, context),
@@ -49,7 +54,7 @@ public class FlinkExternalCatalogFactory implements CatalogFactory {
                         cl,
                         options);
 
-        return new FlinkExternalCatalog(paimon,fileIO);
+        return new FlinkExternalCatalog(paimon, fileIO);
     }
 
     @Override
