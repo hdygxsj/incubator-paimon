@@ -194,6 +194,11 @@
         <!-- test dependencies -->
 
         <dependency>
+            <groupId>org.rocksdb</groupId>
+            <artifactId>rocksdbjni</artifactId>
+            <version>5.3.6</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-common</artifactId>
             <version>${project.version}</version>
