@@ -54,7 +54,7 @@ public class FlinkExternalCatalogFactory implements CatalogFactory {
                         cl,
                         options);
 
-        return new FlinkExternalCatalog(paimon, fileIO);
+        return new FlinkExternalCatalog(paimon, fileIO,warehouse);
     }
 
     @Override

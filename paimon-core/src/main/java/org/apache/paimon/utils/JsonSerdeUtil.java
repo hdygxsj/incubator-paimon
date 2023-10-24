@@ -223,5 +223,13 @@ public class JsonSerdeUtil {
         return jsonNode == null || jsonNode.isNull();
     }
 
+    public <T> T fromJson(String json,TypeReference<T> typeReference)  {
+        try {
+            return OBJECT_MAPPER_INSTANCE.readValue(json,typeReference);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private JsonSerdeUtil() {}
 }

@@ -277,7 +277,6 @@ public class FlinkCatalog extends AbstractCatalog {
             throw new UnsupportedOperationException(
                     "Creating table in default database is disabled, please specify a database name.");
         }
-
         Identifier identifier = toIdentifier(tablePath);
         Map<String, String> options = table.getOptions();
         Schema paimonSchema = buildPaimonSchema(identifier, (CatalogTable) table, options);
