@@ -34,7 +34,6 @@ import com.ververica.cdc.connectors.mongodb.source.MongoDBSource;
 import com.ververica.cdc.connectors.mongodb.source.config.MongoDBSourceOptions;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 import javax.annotation.Nullable;
 
@@ -117,7 +116,7 @@ public class MongoDBSyncDatabaseAction extends ActionBase {
     }
 
     @Override
-    public void build(StreamExecutionEnvironment env) throws Exception {
+    public void build() throws Exception {
         boolean caseSensitive = catalog.caseSensitive();
 
         if (!caseSensitive) {
@@ -125,10 +124,8 @@ public class MongoDBSyncDatabaseAction extends ActionBase {
         }
 
         catalog.createDatabase(database, true);
-        TableNameConverter tableNameConverter =
-                new TableNameConverter(caseSensitive, true, tablePrefix, tableSuffix);
-        List<Identifier> excludedTables = new ArrayList<>();
 
+        List<Identifier> excludedTables = new ArrayList<>();
         MongoDBSource<String> source =
                 MongoDBActionUtils.buildMongodbSource(
                         mongodbConfig,
@@ -143,16 +140,19 @@ public class MongoDBSyncDatabaseAction extends ActionBase {
         Pattern includingPattern = Pattern.compile(this.includingTables);
         Pattern excludingPattern =
                 excludingTables == null ? null : Pattern.compile(excludingTables);
+        TableNameConverter tableNameConverter =
+                new TableNameConverter(caseSensitive, true, tablePrefix, tableSuffix);
         parserFactory =
                 () ->
                         new RichCdcMultiplexRecordEventParser(
-                                schemaBuilder, includingPattern, excludingPattern);
+                                schemaBuilder,
+                                includingPattern,
+                                excludingPattern,
+                                tableNameConverter);
         new FlinkCdcSyncDatabaseSinkBuilder<RichCdcMultiplexRecord>()
                 .withInput(
                         env.fromSource(source, WatermarkStrategy.noWatermarks(), "MongoDB Source")
-                                .flatMap(
-                                        new MongoDBRecordParser(
-                                                caseSensitive, tableNameConverter, mongodbConfig)))
+                                .flatMap(new MongoDBRecordParser(caseSensitive, mongodbConfig)))
                 .withParserFactory(parserFactory)
                 .withCatalogLoader(catalogLoader())
                 .withDatabase(database)
@@ -190,8 +190,7 @@ public class MongoDBSyncDatabaseAction extends ActionBase {
 
     @Override
     public void run() throws Exception {
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        build(env);
+        build();
         env.execute(String.format("MongoDB-Paimon Database Sync: %s", database));
     }
 }

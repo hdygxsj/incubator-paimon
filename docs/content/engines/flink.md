@@ -70,8 +70,6 @@ You can find the bundled jar in `./paimon-flink/paimon-flink-<flink-version>/tar
 
 ## Quick Start
 
-### Using bundled Jar
-
 **Step 1: Download Flink**
 
 If you haven't downloaded Flink, you can [download Flink](https://flink.apache.org/downloads.html), then extract the archive with the following command.
@@ -245,7 +243,18 @@ Stop the Flink local cluster.
 ./bin/stop-cluster.sh
 ```
 
-### Using Action Jar
+## Savepoint and recover
+
+Because Paimon has its own snapshot management, this may conflict with Flink's checkpoint management, causing
+exceptions when restoring from savepoint (don't worry, it will not cause the storage to be damaged).
+
+It is recommended that you use the following methods to savepoint:
+1. Use [Stop with savepoint](https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/state/savepoints/#stopping-a-job-with-savepoint).
+2. Use [Tag with savepoint]({{< ref "maintenance/manage-tags#work-with-flink-savepoint" >}}), and rollback-to-tag
+   before restoring from savepoint.
+
+## Using Action Jar
+
 After the Flink Local Cluster has been started, you can execute the action jar by using the following command
 
 ```
@@ -291,4 +300,20 @@ Users can set memory weight in SQL for Flink Managed Memory, then Flink sink ope
 ```sql
 INSERT INTO paimon_table /*+ OPTIONS('sink.use-managed-memory-allocator'='true', 'sink.managed.writer-buffer-memory'='256M') */
 SELECT * FROM ....;
+```
+## Setting dynamic options
+
+When interacting with the Paimon table, table options can be tuned without changing the options in the catalog. Paimon will extract job-level dynamic options and take effect in the current session.
+The dynamic option's key format is `paimon.${catalogName}.${dbName}.${tableName}.${config_key}`. The catalogName/dbName/tableName can be `*`, which means matching all the specific parts. 
+
+For example:
+
+```sql
+-- set scan.timestamp-millis=1697018249000 for the table mycatalog.default.T
+SET 'paimon.mycatalog.default.T.scan.timestamp-millis' = '1697018249000';
+SELECT * FROM T;
+
+-- set scan.timestamp-millis=1697018249000 for the table default.T in any catalog
+SET 'paimon.*.default.T.scan.timestamp-millis' = '1697018249000';
+SELECT * FROM T;
 ```

@@ -29,9 +29,8 @@ import org.apache.paimon.utils.Preconditions;
 
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.data.RowData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,8 +39,6 @@ import java.util.Map;
 
 /** Abstract base of {@link Action} for table. */
 public abstract class TableActionBase extends ActionBase {
-
-    private static final Logger LOG = LoggerFactory.getLogger(TableActionBase.class);
 
     protected Table table;
     protected final Identifier identifier;
@@ -61,7 +58,7 @@ public abstract class TableActionBase extends ActionBase {
     }
 
     /** Sink {@link DataStream} dataStream to table with Flink Table API in batch environment. */
-    protected void batchSink(DataStream<RowData> dataStream) {
+    public TableResult batchSink(DataStream<RowData> dataStream) {
         List<Transformation<?>> transformations =
                 Collections.singletonList(
                         new FlinkSinkBuilder((FileStoreTable) table)
@@ -71,7 +68,8 @@ public abstract class TableActionBase extends ActionBase {
 
         List<String> sinkIdentifierNames = Collections.singletonList(identifier.getFullName());
 
-        TableEnvironmentUtils.executeInternal(batchTEnv, transformations, sinkIdentifierNames);
+        return TableEnvironmentUtils.executeInternal(
+                batchTEnv, transformations, sinkIdentifierNames);
     }
 
     /**

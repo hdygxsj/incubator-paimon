@@ -20,11 +20,11 @@ package org.apache.paimon.spark.sources
 import org.apache.paimon.CoreOptions
 import org.apache.paimon.data.BinaryRow
 import org.apache.paimon.spark.SparkTypeUtils
-import org.apache.paimon.spark.commands.WithFileStoreTable
-import org.apache.paimon.table.source.{DataSplit, InnerStreamTableScan, ScanMode}
+import org.apache.paimon.table.DataTable
+import org.apache.paimon.table.source.{DataSplit, InnerStreamTableScan}
 import org.apache.paimon.table.source.TableScan.Plan
 import org.apache.paimon.table.source.snapshot.StartingContext
-import org.apache.paimon.utils.RowDataPartitionComputer
+import org.apache.paimon.utils.{RowDataPartitionComputer, TypeUtils}
 
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -33,9 +33,11 @@ import org.apache.spark.sql.types.StructType
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-case class IndexedDataSplit(snapshotId: Long, index: Long, entry: DataSplit, isLast: Boolean)
+case class IndexedDataSplit(snapshotId: Long, index: Long, entry: DataSplit)
 
-trait StreamHelper extends WithFileStoreTable {
+trait StreamHelper {
+
+  def table: DataTable
 
   val initOffset: PaimonSourceOffset
 
@@ -44,12 +46,12 @@ trait StreamHelper extends WithFileStoreTable {
   private lazy val streamScan: InnerStreamTableScan = table.newStreamScan()
 
   private lazy val partitionSchema: StructType =
-    SparkTypeUtils.fromPaimonRowType(table.schema().logicalPartitionType())
+    SparkTypeUtils.fromPaimonRowType(TypeUtils.project(table.rowType(), table.partitionKeys()))
 
   private lazy val partitionComputer: RowDataPartitionComputer = new RowDataPartitionComputer(
-    new CoreOptions(table.schema.options).partitionDefaultName,
-    table.schema.logicalPartitionType,
-    table.schema.partitionKeys.asScala.toArray
+    new CoreOptions(table.options).partitionDefaultName,
+    TypeUtils.project(table.rowType(), table.partitionKeys()),
+    table.partitionKeys().asScala.toArray
   )
 
   // Used to get the initial offset.
@@ -61,7 +63,13 @@ trait StreamHelper extends WithFileStoreTable {
       limit: ReadLimit): Option[PaimonSourceOffset] = {
     val indexedDataSplits = getBatch(startOffset, endOffset, Some(limit))
     indexedDataSplits.lastOption
-      .map(ids => PaimonSourceOffset(ids.snapshotId, ids.index, scanSnapshot = false))
+      .map(
+        ids =>
+          PaimonSourceOffset(
+            ids.snapshotId,
+            ids.index,
+            scanSnapshot =
+              startOffset.scanSnapshot && ids.snapshotId.equals(startOffset.snapshotId)))
   }
 
   def getBatch(
@@ -69,7 +77,7 @@ trait StreamHelper extends WithFileStoreTable {
       endOffset: Option[PaimonSourceOffset],
       limit: Option[ReadLimit]): Array[IndexedDataSplit] = {
     if (startOffset != null) {
-      streamScan.restore(startOffset.snapshotId, needToScanCurrentSnapshot(startOffset.snapshotId))
+      streamScan.restore(startOffset.snapshotId, startOffset.scanSnapshot)
     }
 
     val readLimitGuard = limit.flatMap(PaimonReadLimits(_, lastTriggerMillis))
@@ -111,14 +119,13 @@ trait StreamHelper extends WithFileStoreTable {
     val dataSplits =
       plan.splits().asScala.collect { case dataSplit: DataSplit => dataSplit }.toArray
     val snapshotId = dataSplits.head.snapshotId()
-    val length = dataSplits.length
 
     dataSplits
       .sortWith((ds1, ds2) => compareByPartitionAndBucket(ds1, ds2) < 0)
       .zipWithIndex
       .map {
         case (split, idx) =>
-          IndexedDataSplit(snapshotId, idx, split, idx == length - 1)
+          IndexedDataSplit(snapshotId, idx, split)
       }
   }
 

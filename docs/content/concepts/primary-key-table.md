@@ -64,6 +64,8 @@ Performance:
    entries in a partition takes up **1 GB** more memory, partitions that are no longer active do not take up memory.
 2. For tables with low update rates, this mode is recommended to significantly improve performance.
 
+`Normal Dynamic Bucket Mode` supports sort-compact to speed up queries. See [Sort Compact]({{< ref "maintenance/dedicated-compaction#sort-compact" >}}).
+
 #### Cross Partitions Upsert Dynamic Bucket Mode
 
 {{< hint info >}}
@@ -81,13 +83,9 @@ existing keys in the table when starting stream write job. Different merge engin
 Performance: For tables with a large amount of data, there will be a significant loss in performance. Moreover,
 initialization takes a long time.
 
-If your upsert does not rely on too old data, you can consider configuring index TTL and bootstrap-min-partition to
-reduce Index and initialization time:
-- `'cross-partition-upsert.index-ttl'`: The TTL in rocksdb index, this can avoid maintaining too many indexes and lead
-  to worse and worse performance.
-- `'cross-partition-upsert.bootstrap-min-partition'`: The min partition bootstrap of rocksdb index, bootstrap will only
-  read the partitions above it, and the smaller partitions will not be read into the index. This can reduce job startup
-  time and excessive initialization of index.
+If your upsert does not rely on too old data, you can consider configuring index TTL to reduce Index and initialization time:
+- `'cross-partition-upsert.index-ttl'`: The TTL in rocksdb index and initialization, this can avoid maintaining too many
+  indexes and lead to worse and worse performance.
 
 But please note that this may also cause data duplication.
 
@@ -120,7 +118,8 @@ For example, suppose Paimon receives three records:
 Assuming that the first column is the primary key, the final result would be `<1, 25.2, 10, 'This is a book'>`.
 
 {{< hint info >}}
-For streaming queries, `partial-update` merge engine must be used together with `lookup` or `full-compaction` [changelog producer]({{< ref "concepts/primary-key-table#changelog-producers" >}}).
+For streaming queries, `partial-update` merge engine must be used together with `lookup` or `full-compaction`
+[changelog producer]({{< ref "concepts/primary-key-table#changelog-producers" >}}). ('input' changelog producer is also supported, but only returns input records.)
 {{< /hint >}}
 
 {{< hint info >}}
@@ -257,7 +256,8 @@ If you allow some functions to ignore retraction messages, you can configure:
 `'fields.${field_name}.ignore-retract'='true'`.
 
 {{< hint info >}}
-For streaming queries, `aggregation` merge engine must be used together with `lookup` or `full-compaction` [changelog producer]({{< ref "concepts/primary-key-table#changelog-producers" >}}).
+For streaming queries, `aggregation` merge engine must be used together with `lookup` or `full-compaction`
+[changelog producer]({{< ref "concepts/primary-key-table#changelog-producers" >}}). ('input' changelog producer is also supported, but only returns input records.)
 {{< /hint >}}
 
 ### First Row

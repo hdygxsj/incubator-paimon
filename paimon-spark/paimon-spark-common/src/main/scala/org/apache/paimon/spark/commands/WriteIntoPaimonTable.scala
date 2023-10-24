@@ -140,15 +140,17 @@ case class WriteIntoPaimonTable(
       .collect()
       .map(deserializeCommitMessage(serializer, _))
 
+    val tableCommit = if (overwritePartition == null) {
+      writeBuilder.newCommit()
+    } else {
+      writeBuilder.withOverwrite(overwritePartition.asJava).newCommit()
+    }
     try {
-      val tableCommit = if (overwritePartition == null) {
-        writeBuilder.newCommit()
-      } else {
-        writeBuilder.withOverwrite(overwritePartition.asJava).newCommit()
-      }
       tableCommit.commit(commitMessages.toList.asJava)
     } catch {
       case e: Throwable => throw new RuntimeException(e);
+    } finally {
+      tableCommit.close();
     }
 
     Seq.empty
@@ -245,7 +247,8 @@ object WriteIntoPaimonTable {
               indexFileHandler,
               partition,
               targetBucketRowNumber,
-              (_) => true))
+              (_) => true,
+              buckFilter))
           val bucket = index.assign(hash, buckFilter)
           val sparkInternalRow = toRow(row)
           sparkInternalRow.setInt(bucketColIndex, bucket)

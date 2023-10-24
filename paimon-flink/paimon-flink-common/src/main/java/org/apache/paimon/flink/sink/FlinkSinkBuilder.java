@@ -44,6 +44,7 @@ public class FlinkSinkBuilder {
     @Nullable private Map<String, String> overwritePartition;
     @Nullable private LogSinkFunction logSinkFunction;
     @Nullable private Integer parallelism;
+    private boolean compactSink = false;
 
     public FlinkSinkBuilder(FileStoreTable table) {
         this.table = table;
@@ -54,7 +55,16 @@ public class FlinkSinkBuilder {
         return this;
     }
 
-    public FlinkSinkBuilder withOverwritePartition(Map<String, String> overwritePartition) {
+    /**
+     * Whether we need to overwrite partitions.
+     *
+     * @param overwritePartition If we pass null, it means not overwrite. If we pass an empty map,
+     *     it means to overwrite every partition it received. If we pass a non-empty map, it means
+     *     we only overwrite the partitions match the map.
+     * @return returns this.
+     */
+    public FlinkSinkBuilder withOverwritePartition(
+            @Nullable Map<String, String> overwritePartition) {
         this.overwritePartition = overwritePartition;
         return this;
     }
@@ -66,6 +76,11 @@ public class FlinkSinkBuilder {
 
     public FlinkSinkBuilder withParallelism(@Nullable Integer parallelism) {
         this.parallelism = parallelism;
+        return this;
+    }
+
+    public FlinkSinkBuilder forCompact(boolean compactSink) {
+        this.compactSink = compactSink;
         return this;
     }
 
@@ -99,9 +114,14 @@ public class FlinkSinkBuilder {
     private DataStreamSink<?> buildDynamicBucketSink(
             DataStream<InternalRow> input, boolean globalIndex) {
         checkArgument(logSinkFunction == null, "Dynamic bucket mode can not work with log system.");
-        return globalIndex
-                ? new GlobalDynamicBucketSink(table, overwritePartition).build(input, parallelism)
-                : new RowDynamicBucketSink(table, overwritePartition).build(input, parallelism);
+        return compactSink && !globalIndex
+                // todo support global index sort compact
+                ? new DynamicBucketCompactSink(table, overwritePartition).build(input, parallelism)
+                : globalIndex
+                        ? new GlobalDynamicBucketSink(table, overwritePartition)
+                                .build(input, parallelism)
+                        : new RowDynamicBucketSink(table, overwritePartition)
+                                .build(input, parallelism);
     }
 
     private DataStreamSink<?> buildForFixedBucket(DataStream<InternalRow> input) {

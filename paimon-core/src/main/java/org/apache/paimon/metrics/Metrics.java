@@ -19,6 +19,7 @@
 package org.apache.paimon.metrics;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.stream.Collectors;
 
 /** Core of Paimon metrics system. */
 public class Metrics {
@@ -44,8 +45,19 @@ public class Metrics {
         metricGroups.add(group);
     }
 
+    /** Remove a metric group. Called when closing the corresponding instances, like committer. */
+    public void removeGroup(AbstractMetricGroup group) {
+        metricGroups.remove(group);
+    }
+
     /** Get metric groups. */
     public ConcurrentLinkedQueue<MetricGroup> getMetricGroups() {
         return metricGroups;
+    }
+
+    public static String groupsInfo() {
+        return getInstance().getMetricGroups().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining(", ", "[", "]"));
     }
 }
