@@ -1,6 +1,8 @@
 package main;
 
+
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
@@ -18,14 +20,14 @@ public class S3Test {
                     + ");";
 
     static String createTable =
-            "CREATE  TABLE IF  NOT EXISTS  word_count2 (\n"
+            "CREATE   TABLE IF  NOT EXISTS  word_count2 (\n"
                     + "    word STRING PRIMARY KEY NOT ENFORCED,\n"
                     + "    cnt BIGINT\n"
                     + ");";
 
     static String showTable = "show tables";
 
-    static String createDataGenTable = "CREATE TABLE word_table (\n" +
+    static String createDataGenTable = "CREATE TEMPORARY TABLE word_table (\n" +
             "    word STRING\n" +
             ") WITH (\n" +
             "    'connector' = 'datagen',\n" +
@@ -39,6 +41,17 @@ public class S3Test {
             "dt STRING COMMENT 'timestamp string in format yyyyMMdd',\n" +
             "PRIMARY KEY(id, dt) NOT ENFORCED\n" +
             ") PARTITIONED BY (dt);";
+
+    static String createKafkaTable = "CREATE TABLE KAFKA_TEST_TOPIC1 (\n" +
+            "    word STRING\n" +
+            ") WITH (\n" +
+            "  'connector' = 'kafka',\n" +
+            "  'topic' = 'word',\n" +
+            "  'properties.bootstrap.servers' = '172.19.210.178:9092',\n" +
+            "  'properties.group.id' = 'testGroup',\n" +
+            "  'scan.startup.mode' = 'earliest-offset',\n" +
+            "  'format' = 'json'\n" +
+            ")";
 
     public static void main(String[] args) {
 //        System.out.println(createCatalog);
@@ -59,7 +72,7 @@ public class S3Test {
         conf.setString("state.savepoints.dir", "s3a://flink/savepoints");
 //////        conf.setString("state.backend.type","rocksdb");
 //////        conf.setString("state.backend.incremental","true");
-////        conf.setInteger(RestOptions.PORT,8085);
+        conf.setInteger(RestOptions.PORT,8085);
         LocalStreamEnvironment localEnvironment = StreamExecutionEnvironment.createLocalEnvironment(conf);
         localEnvironment.enableCheckpointing(10000);
         StreamTableEnvironment tenv = StreamTableEnvironment.create(localEnvironment);
@@ -72,8 +85,11 @@ public class S3Test {
 //        tenv.executeSql(createCatalogTest1);
         tenv.executeSql("show databases").print();
         tenv.executeSql(createDataGenTable);
+        tenv.executeSql(createKafkaTable);
         tenv.executeSql("show tables;").print();
-        tenv.executeSql("select * from word_table").print();
+//        tenv.executeSql("INSERT INTO KAFKA_TEST_TOPIC1 SELECT * FROM word_table");
+        tenv.executeSql("SELECT * FROM KAFKA_TEST_TOPIC1").print();
+//        tenv.executeSql("select * from KAFKA_TEST_TOPIC").print();
 ////        tenv.executeSql("show databases").print();
 //        tenv.executeSql(createDataGenTable);
 //        tenv.executeSql(createTable);

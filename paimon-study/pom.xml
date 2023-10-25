@@ -36,7 +36,9 @@
             <version>${flink.version}</version>
             <scope>provided</scope>
         </dependency>
-<!--        <dependency>-->
+
+
+        <!--        <dependency>-->
 <!--            <groupId>org.apache.paimon</groupId>-->
 <!--            <artifactId>paimon-s3</artifactId>-->
 <!--            <version>0.6-SNAPSHOT</version>-->
@@ -287,7 +289,7 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-json</artifactId>
             <version>${flink.version}</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
