@@ -42,7 +42,18 @@ public class S3Test {
             "PRIMARY KEY(id, dt) NOT ENFORCED\n" +
             ") PARTITIONED BY (dt);";
 
-    static String createKafkaTable = "CREATE TABLE KAFKA_TEST_TOPIC1 (\n" +
+    static String createKafkaTable = "CREATE  TABLE IF NOT EXISTS KAFKA_TEST_TOPIC1 (\n" +
+            "    word STRING\n" +
+            ") WITH (\n" +
+            "  'connector' = 'kafka',\n" +
+            "  'topic' = 'word',\n" +
+            "  'properties.bootstrap.servers' = '172.19.210.178:9092',\n" +
+            "  'properties.group.id' = 'testGroup',\n" +
+            "  'scan.startup.mode' = 'earliest-offset',\n" +
+            "  'format' = 'json'\n" +
+            ")";
+
+    static String createKafkaTable2 = "CREATE TABLE a.KAFKA_TEST_TOPIC1 (\n" +
             "    word STRING\n" +
             ") WITH (\n" +
             "  'connector' = 'kafka',\n" +
@@ -86,6 +97,11 @@ public class S3Test {
         tenv.executeSql("show databases").print();
         tenv.executeSql(createDataGenTable);
         tenv.executeSql(createKafkaTable);
+        tenv.executeSql("drop table KAFKA_TEST_TOPIC1");
+        tenv.executeSql(createKafkaTable);
+        tenv.executeSql("ALTER TABLE KAFKA_TEST_TOPIC1 ADD (c1 INT, c2 STRING);");
+        tenv.executeSql("create database a");
+        tenv.executeSql(createKafkaTable2);
         tenv.executeSql("show tables;").print();
 //        tenv.executeSql("INSERT INTO KAFKA_TEST_TOPIC1 SELECT * FROM word_table");
         tenv.executeSql("SELECT * FROM KAFKA_TEST_TOPIC1").print();

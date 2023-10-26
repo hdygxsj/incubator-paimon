@@ -1,7 +1,6 @@
 package org.apache.paimon.flink;
 
 
-import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogDatabase;
@@ -30,14 +29,11 @@ import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.FileStatus;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.shade.jackson2.com.fasterxml.jackson.core.type.TypeReference;
-import org.apache.paimon.shade.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.paimon.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.paimon.shade.jackson2.com.fasterxml.jackson.databind.node.TextNode;
 import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.StringUtils;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -157,11 +153,7 @@ public class FlinkExternalCatalog extends AbstractCatalog {
 
     }
 
-    @Override
-    public List<String> listViews(String databaseName)
-            throws DatabaseNotExistException, CatalogException {
-        return paimon.listViews(databaseName);
-    }
+
 
     @Override
     public CatalogBaseTable getTable(ObjectPath tablePath)
@@ -171,12 +163,15 @@ public class FlinkExternalCatalog extends AbstractCatalog {
         } catch (TableNotExistException | CatalogException e) {
             Path tableSchemaPath = new Path(externalTableSchemaDir(tablePath) + "schema");
             try {
+                if (!fileIO.exists(tableSchemaPath)) {
+                    throw new TableNotExistException(getName(), tablePath);
+                }
                 String schemaStr = fileIO.readFileUtf8(tableSchemaPath);
                 Map<String, Object> propertiesMap = new ObjectMapper().readValue(schemaStr, new TypeReference<HashMap<String, Object>>() {
                 });
-                Map<String,String> properties = new HashMap<>();
-                propertiesMap.forEach((key,value)->{
-                    properties.put(key,String.valueOf(value));
+                Map<String, String> properties = new HashMap<>();
+                propertiesMap.forEach((key, value) -> {
+                    properties.put(key, String.valueOf(value));
                 });
                 return CatalogTable.fromProperties(properties);
             } catch (IOException ex) {
@@ -185,26 +180,45 @@ public class FlinkExternalCatalog extends AbstractCatalog {
         }
     }
 
-//    private CatalogTable createCatalogTable(ExternalTableSchema externalTableSchema) {
-//
-//
-//        return CatalogTable.of(schema, externalTableSchema.comment,
-//                externalTableSchema.partitionKeys, externalTableSchema.options);
-//    }
-
     @Override
     public boolean tableExists(ObjectPath tablePath) throws CatalogException {
-        return false;
+        try {
+            return getTable(tablePath) != null;
+        } catch (TableNotExistException e) {
+            throw new CatalogException(e);
+        }
     }
 
     @Override
     public void dropTable(ObjectPath tablePath, boolean ignoreIfNotExists)
             throws TableNotExistException, CatalogException {
+        CatalogBaseTable table = getTable(tablePath);
+        if (isPaimonTable(table)) {
+            paimon.dropTable(tablePath, ignoreIfNotExists);
+        }
+        Path path = new Path(externalTableSchemaDir(tablePath));
+        try {
+            fileIO.delete(path, true);
+        } catch (IOException e) {
+            throw new CatalogException("can not delete external table", e);
+        }
     }
 
     @Override
     public void renameTable(ObjectPath tablePath, String newTableName, boolean ignoreIfNotExists)
             throws TableNotExistException, TableAlreadyExistException, CatalogException {
+        if (isPaimonTable(getTable(tablePath))) {
+            paimon.renameTable(tablePath, newTableName, ignoreIfNotExists);
+            return;
+        }
+        ObjectPath newObjectPath = new ObjectPath(tablePath.getDatabaseName(), newTableName);
+        Path newPath = new Path(externalTableSchemaDir(newObjectPath));
+        Path oldPath = new Path(externalTableSchemaDir(tablePath));
+        try {
+            fileIO.rename(oldPath, newPath);
+        } catch (IOException e) {
+            throw new CatalogException("can not rename table to" + newTableName, e);
+        }
     }
 
     @Override
@@ -212,24 +226,26 @@ public class FlinkExternalCatalog extends AbstractCatalog {
             throws TableAlreadyExistException, DatabaseNotExistException, CatalogException {
         if (isPaimonTable(table)) {
             paimon.createTable(tablePath, table, ignoreIfExists);
-        } else {
-            if (table instanceof CatalogTable) {
-                CatalogTable catalogTable = (CatalogTable) table;
-//                ExternalTableSchema externalTableSchema = new ExternalTableSchema();
-//                Schema unresolvedSchema = catalogTable.getUnresolvedSchema();
-//                externalTableSchema.setComment(catalogTable.getComment());
-//                externalTableSchema.setOptions(catalogTable.getOptions());
-//                externalTableSchema.setPartitionKeys(catalogTable.getPartitionKeys());
-                String tableMetaJson = JsonSerdeUtil.toJson(catalogTable.toProperties());
-                Path tableSchemaPath = new Path(externalTableSchemaDir(tablePath) + "schema");
-                try {
-                    fileIO.writeFileUtf8(tableSchemaPath, tableMetaJson);
-                } catch (IOException e) {
-                    throw new CatalogException("can not create external table", e);
-                }
-            } else {
-                throw new CatalogException("can not create external table");
+            return;
+        }
+        if (!(table instanceof CatalogTable)) {
+            throw new UnsupportedOperationException(
+                    "Only support CatalogTable, but is: " + table.getClass());
+        }
+        String databaseName = tablePath.getDatabaseName();
+        if (!databaseExists(databaseName)) {
+            throw new DatabaseNotExistException(getName(), databaseName);
+        }
+        CatalogTable catalogTable = (CatalogTable) table;
+        Path tableSchemaPath = new Path(externalTableSchemaDir(tablePath) + "schema");
+        try {
+            if (fileIO.exists(tableSchemaPath) && !ignoreIfExists) {
+                throw new TableAlreadyExistException(getName(), tablePath);
             }
+            String tableMetaJson = JsonSerdeUtil.toJson(catalogTable.toProperties());
+            fileIO.writeFileUtf8(tableSchemaPath, tableMetaJson);
+        } catch (IOException e) {
+            throw new CatalogException("can not create external table", e);
         }
     }
 
@@ -237,11 +253,23 @@ public class FlinkExternalCatalog extends AbstractCatalog {
     public void alterTable(
             ObjectPath tablePath, CatalogBaseTable newTable, boolean ignoreIfNotExists)
             throws TableNotExistException, CatalogException {
-        if (isPaimonTable(getTable(tablePath))) {
+        CatalogBaseTable table = getTable(tablePath);
+        if (isPaimonTable(table)) {
             paimon.alterTable(tablePath, newTable, ignoreIfNotExists);
         } else {
+            dropTable(tablePath, ignoreIfNotExists);
+            try {
+                createTable(tablePath, newTable, ignoreIfNotExists);
+            } catch (TableAlreadyExistException | DatabaseNotExistException ignore) {
 
+            }
         }
+    }
+
+    @Override
+    public List<String> listViews(String databaseName)
+            throws DatabaseNotExistException, CatalogException {
+        return paimon.listViews(databaseName);
     }
 
     @Override
@@ -309,35 +337,38 @@ public class FlinkExternalCatalog extends AbstractCatalog {
     @Override
     public List<String> listFunctions(String dbName)
             throws DatabaseNotExistException, CatalogException {
-        return null;
+        return paimon.listFunctions(dbName);
     }
 
     @Override
     public CatalogFunction getFunction(ObjectPath functionPath)
             throws FunctionNotExistException, CatalogException {
-        return null;
+        return paimon.getFunction(functionPath);
     }
 
     @Override
     public boolean functionExists(ObjectPath functionPath) throws CatalogException {
-        return false;
+        return paimon.functionExists(functionPath);
     }
 
     @Override
     public void createFunction(
             ObjectPath functionPath, CatalogFunction function, boolean ignoreIfExists)
             throws FunctionAlreadyExistException, DatabaseNotExistException, CatalogException {
+        paimon.createFunction(functionPath, function, ignoreIfExists);
     }
 
     @Override
     public void alterFunction(
             ObjectPath functionPath, CatalogFunction newFunction, boolean ignoreIfNotExists)
             throws FunctionNotExistException, CatalogException {
+        paimon.alterFunction(functionPath, newFunction, ignoreIfNotExists);
     }
 
     @Override
     public void dropFunction(ObjectPath functionPath, boolean ignoreIfNotExists)
             throws FunctionNotExistException, CatalogException {
+        paimon.dropFunction(functionPath, ignoreIfNotExists);
     }
 
     @Override
