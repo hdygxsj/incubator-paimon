@@ -87,6 +87,7 @@ public class KafkaLogDeserializationSchema implements KafkaDeserializationSchema
     private static RowData.FieldGetter createNullCheckingFieldGetter(
             LogicalType dataType, int index) {
         RowData.FieldGetter getter = RowData.createFieldGetter(dataType, index);
+        int a;
         if (dataType.isNullable()) {
             return getter;
         } else {
